@@ -2,6 +2,69 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useState } from "react"
+import LambdaSummary from "../../../components/LambdaSummary"
+
+type SnippetMap = {
+  model_type?: string
+  input_data_file?: string
+  metrics_used?: string
+  tunable_parameters?: string
+}
+
+function extractJSONFromLambdaResponse(raw: string): any | null {
+  const match = raw.match(/```json\s*([\s\S]*?)\s*```/)
+  if (!match || !match[1]) return null
+
+  try {
+    return JSON.parse(match[1])
+  } catch (err) {
+    console.error("❌ JSON parse failed:", err)
+    return null
+  }
+}
+
+
+export function extractSnippets(notebookRaw: any): SnippetMap {
+  const result: SnippetMap = {}
+
+  const cells = notebookRaw?.cells || []
+
+  for (const cell of cells) {
+    if (cell.cell_type !== "code") continue
+
+    const code = Array.isArray(cell.source) ? cell.source.join("") : cell.source
+
+    // Detect model definition
+    if (!result.model_type && /RandomForest|LogisticRegression|XGBClassifier|SVC/.test(code)) {
+      result.model_type = code.trim()
+    }
+
+    // Detect input file
+    if (!result.input_data_file && /read_csv|read_excel|read_json/.test(code)) {
+      result.input_data_file = code.trim()
+    }
+
+    // Detect metrics
+    if (!result.metrics_used && /accuracy_score|f1_score|roc_auc_score|confusion_matrix/.test(code)) {
+      result.metrics_used = code.trim()
+    }
+
+    // Detect parameters passed to a model
+    if (!result.tunable_parameters && /n_estimators|max_depth|learning_rate|C=|alpha=/.test(code)) {
+      result.tunable_parameters = code.trim()
+    }
+
+    // Early exit if all found
+    if (
+      result.model_type &&
+      result.input_data_file &&
+      result.metrics_used &&
+      result.tunable_parameters
+    ) break
+  }
+
+  return result
+}
 
 export default function NewProjectPage() {
   const { data: session } = useSession()
@@ -9,12 +72,21 @@ export default function NewProjectPage() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [parsedOutput, setParsedOutput] = useState<string | null>(null)
+  const [notebookRaw, setNotebookRaw] = useState<any | null>(null)
+  const [parsedJSON, setParsedJSON] = useState<any | null>(null)
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0])
-    }
+
+  
+const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (e.target.files && e.target.files[0]) {
+    const file = e.target.files[0]
+    setSelectedFile(file)
+    // Parse notebook raw content on frontend
+    const text = await file.text()
+    const parsed = JSON.parse(text)
+    setNotebookRaw(parsed)
   }
+}
 
 const handleSubmit = async () => {
   if (!selectedFile) return alert("Please upload a notebook file")
@@ -29,10 +101,21 @@ const handleSubmit = async () => {
       credentials: "include"
     })
 
-    const result = await res.json()
-    console.log("💡 Lambda parsed output:", result.parsed)
+const result = await res.json()
+console.log("🧠 Raw Lambda Output:", result.parsed)
 
-    setParsedOutput(result.parsed) // ⬅️ this line is key
+const parsed = extractJSONFromLambdaResponse(result.parsed)
+
+if (!parsed) {
+  alert("Couldn't parse JSON from Lambda response. Check console.")
+  return
+}
+
+setParsedOutput(result.parsed)     // keep for raw display if you want
+setParsedJSON(parsed)              // for UI use
+
+
+
   } catch (err) {
     console.error("Error parsing notebook:", err)
     alert("Failed to parse notebook.")
@@ -496,25 +579,9 @@ const handleSubmit = async () => {
           <h1 className="welcome">start a new project</h1>
 
           <div className="upload-box">
-            {parsedOutput && (
-            <div style={{ marginTop: '24px' }}>
-                <h2 style={{ fontSize: '1.1rem', marginBottom: '12px', color: '#f1f5f9' }}>lambda output</h2>
-                <pre
-                style={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    borderRadius: '8px',
-                    padding: '20px',
-                    whiteSpace: 'pre-wrap',
-                    fontSize: '0.85rem',
-                    color: '#e2e8f0',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                }}
-                >
-                {parsedOutput}
-                </pre>
-            </div>
-            )}
-
+            {parsedJSON && notebookRaw && (
+  <LambdaSummary parsed={parsedJSON} notebookCodeMap={extractSnippets(notebookRaw)} />
+)}
             <p>Upload your Jupyter notebook (.ipynb) and let lambda take it from here.</p>
             <input className="upload-input" type="file" accept=".ipynb" onChange={handleUpload} />
             {selectedFile && <p style={{ marginTop: '10px' }}>📄 {selectedFile.name}</p>}
