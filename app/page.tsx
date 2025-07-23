@@ -1,11 +1,22 @@
 "use client"
 import { signIn, signOut, useSession } from "next-auth/react"
 import Head from "next/head"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 
 export default function HomePage() {
   const { data: session, status } = useSession()
   const loading = status === "loading"
+  const router = useRouter()
 
+  const [showEnterButton, setShowEnterButton] = useState(false)
+
+  useEffect(() => {
+    if (session && !loading) {
+      const timeout = setTimeout(() => setShowEnterButton(true), 300)
+      return () => clearTimeout(timeout)
+    }
+  }, [session, loading])
 
   return (
     <>
@@ -21,7 +32,7 @@ export default function HomePage() {
           overscroll-behavior: none;
           margin: 0;
           padding: 0;
-          background-color: #0c1f38; /* Deep dark blue */
+          background-color: #0c1f38;
           font-family: 'Sora', sans-serif;
         }
 
@@ -55,7 +66,7 @@ export default function HomePage() {
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          background-color: rgba(12, 31, 56, 0.5); /* semi-transparent dark blue */
+          background-color: rgba(12, 31, 56, 0.5);
           backdrop-filter: blur(8px);
         }
 
@@ -81,11 +92,24 @@ export default function HomePage() {
           cursor: pointer;
           transition: all 0.3s ease;
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+          margin: 0.5rem 0;
         }
 
         .glass-button:hover {
           background: rgba(255, 255, 255, 0.15);
           transform: translateY(-2px);
+        }
+
+        .fade-in {
+          opacity: 0;
+          animation: fadeIn 1.5s ease forwards;
+          animation-delay: 0.3s;
+        }
+
+        @keyframes fadeIn {
+          to {
+            opacity: 1;
+          }
         }
 
         @media (max-width: 768px) {
@@ -103,22 +127,32 @@ export default function HomePage() {
         <div className="content-overlay">
           {!loading && (
             <>
-                <h1 className="welcome-text">
-                {session ? `Welcome ${session.user?.name}` : "Welcome to DatHub"}
-                </h1>
+              <h1 className="welcome-text">
+                {session ? `welcome ${session.user?.name?.toLowerCase()}` : "welcome to dathub"}
+              </h1>
 
-                {session ? (
-                <button onClick={() => signOut()} className="glass-button">
-                    Sign out
-                </button>
-                ) : (
+              {session ? (
+                <>
+                  <button onClick={() => signOut()} className="glass-button">
+                    sign out
+                  </button>
+
+                  {showEnterButton && (
+                    <button
+                      onClick={() => router.push("/dashboard")}
+                      className="glass-button fade-in"
+                    >
+                      open your dathub
+                    </button>
+                  )}
+                </>
+              ) : (
                 <button onClick={() => signIn("github")} className="glass-button">
-                    Sign in with GitHub
+                  sign in w github
                 </button>
-                )}
+              )}
             </>
-            )}
-
+          )}
         </div>
       </div>
     </>
