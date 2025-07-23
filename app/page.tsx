@@ -54,6 +54,7 @@ export default function HomePage() {
           height: 100%;
           object-fit: cover;
           z-index: -1;
+          pointer-events: none;
         }
 
         .content-overlay {
@@ -122,6 +123,7 @@ export default function HomePage() {
       <div className="fullscreen-container">
         <video autoPlay loop muted playsInline className="background-video">
           <source src="/background.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
         </video>
 
         <div className="content-overlay">

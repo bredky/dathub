@@ -1,31 +1,51 @@
 "use client"
 
-import { useSession, signOut} from "next-auth/react"
+import { useSession, signOut } from "next-auth/react"
 import { useState } from "react"
-const Link = require("next/link").default;
 
-
-export default function DashboardPage() {
+export default function NewProjectPage() {
   const { data: session } = useSession()
   const [showOverlaySidebar, setShowOverlaySidebar] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [parsedOutput, setParsedOutput] = useState<string | null>(null)
 
-  const projects = [
-    { name: "dathub", updated: "2 days ago" },
-    { name: "roommates", updated: "5 days ago" },
-    { name: "offside", updated: "1 week ago" },
-  ]
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0])
+    }
+  }
 
-  const activity = [
-    "you uploaded cleaned_v2.csv to dathub",
-    "maria ran churn_model_v3",
-    "you edited learning_rate in roommates"
-  ]
+const handleSubmit = async () => {
+  if (!selectedFile) return alert("Please upload a notebook file")
+
+  const formData = new FormData()
+  formData.append("notebook", selectedFile)
+
+  try {
+    const res = await fetch("/api/lambda/parse", {
+      method: "POST",
+      body: formData,
+      credentials: "include"
+    })
+
+    const result = await res.json()
+    console.log("💡 Lambda parsed output:", result.parsed)
+
+    setParsedOutput(result.parsed) // ⬅️ this line is key
+  } catch (err) {
+    console.error("Error parsing notebook:", err)
+    alert("Failed to parse notebook.")
+  }
+}
+
+
+
 
   return (
     <>
       <style>{`
-        * {
+      * {
           box-sizing: border-box;
         }
 
@@ -368,51 +388,92 @@ export default function DashboardPage() {
 .dropdown-menu:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+        /* Inherit styles from dashboard */
+        body {
+          font-family: 'Sora', sans-serif;
+          color: #d1d5db;
+          text-transform: lowercase;
+          background-color: transparent;
+        }
 
+        .main-content {
+          padding: 32px;
+          z-index: 1;
+          position: relative;
+        }
+
+        .upload-box {
+          background: rgba(255, 255, 255, 0.06);
+          backdrop-filter: blur(6px);
+          padding: 40px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          color: #f1f5f9;
+          max-width: 600px;
+          margin-top: 40px;
+        }
+
+        .upload-input {
+          margin-top: 20px;
+          background: #1e293b;
+          padding: 12px;
+          border-radius: 8px;
+          width: 100%;
+          border: none;
+          color: white;
+        }
+
+        .submit-button {
+          margin-top: 20px;
+          padding: 10px 20px;
+          background: rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 500;
+          transition: background 0.2s ease;
+        }
+
+        .submit-button:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
       `}</style>
 
-      {/* Header */}
+      {/* Reuse header and sidebar logic */}
       <div className="top-header">
         <div className="left-header">
           <button className="pill-button" onClick={() => setShowOverlaySidebar(!showOverlaySidebar)}>sidebar</button>
           <div className="dathub-label">dathub</div>
         </div>
         <div className="right-header">
-        {Link({
-          href: "/project/new",
-          children: <button className="pill-button">+ new project</button>
-        })}
-
+          <button className="pill-button">+ new project</button>
           <button className="pill-button">+ upload dataset</button>
           <input className="search-input" placeholder="search" />
           <div className="avatar-container">
-  {session?.user?.image && (
-    <img
-      src={session.user.image}
-      alt="profile"
-      className="avatar"
-      onClick={() => setShowDropdown(prev => !prev)}
-    />
-  )}
-  {showDropdown && (
-    <div className="dropdown-menu" onClick={() => {
-      setShowDropdown(false);
-      signOut({ callbackUrl: "/" });
-    }}>
-      sign out
-    </div>
-  )}
-</div>
-
+            {session?.user?.image && (
+              <img
+                src={session.user.image}
+                alt="profile"
+                className="avatar"
+                onClick={() => setShowDropdown(prev => !prev)}
+              />
+            )}
+            {showDropdown && (
+              <div className="dropdown-menu" onClick={() => {
+                setShowDropdown(false)
+                signOut({ callbackUrl: "/" })
+              }}>
+                sign out
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Background Video */}
       <video autoPlay loop muted playsInline className="dashboard-video-background">
         <source src="/background.mp4" type="video/mp4" />
       </video>
 
-      {/* Overlay Sidebar */}
       <div className={`overlay-sidebar ${showOverlaySidebar ? "show" : ""}`}>
         <div className="overlay-header">
           <div className="overlay-title">list</div>
@@ -427,67 +488,39 @@ export default function DashboardPage() {
         <div className="overlay-item">marketplace</div>
         <div className="overlay-item">ask lambda</div>
         <hr className="sidebar-divider" />
-        <div className="projects-section">
-          <div className="projects-header">
-            <span className="section-title">projects</span>
-          </div>
-          <ul className="project-list">
-            {projects.map((proj, idx) => (
-              <li key={idx} className="project-link">
-                <span className="repo-icon">⏺</span>
-                bredky/{proj.name}
-              </li>
-            ))}
-          </ul>
-          <span className="show-more">show more</span>
-        </div>
       </div>
 
-      {/* Main App */}
-      <div className="dashboard-container">
-        <aside className="sidebar">
-          <div>
-            <h2 className="sidebar-title">top projects</h2>
-            <ul className="project-list">
-              {projects.map((proj, idx) => (
-                <li key={idx} className="project-link">bredky/{proj.name}</li>
-              ))}
-            </ul>
+      <div className="main-content-overlay-wrapper">
+        <div className="main-bg-overlay" />
+        <main className="main-content">
+          <h1 className="welcome">start a new project</h1>
+
+          <div className="upload-box">
+            {parsedOutput && (
+            <div style={{ marginTop: '24px' }}>
+                <h2 style={{ fontSize: '1.1rem', marginBottom: '12px', color: '#f1f5f9' }}>lambda output</h2>
+                <pre
+                style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    whiteSpace: 'pre-wrap',
+                    fontSize: '0.85rem',
+                    color: '#e2e8f0',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+                >
+                {parsedOutput}
+                </pre>
+            </div>
+            )}
+
+            <p>Upload your Jupyter notebook (.ipynb) and let lambda take it from here.</p>
+            <input className="upload-input" type="file" accept=".ipynb" onChange={handleUpload} />
+            {selectedFile && <p style={{ marginTop: '10px' }}>📄 {selectedFile.name}</p>}
+            <button className="submit-button" onClick={handleSubmit}>submit to lambda</button>
           </div>
-          <div className="footer">&copy; 2025 dathub</div>
-        </aside>
-
-<div className="main-content-overlay-wrapper">
-  <div className="main-bg-overlay" />
-  <main className="main-content">
-            <div className="header">
-              <h1 className="welcome">welcome, {session?.user?.name?.toLowerCase() || "..."}</h1>
-            </div>
-
-            <div className="grid-container">
-              <section className="project-section">
-                <h2>your projects</h2>
-                <ul className="project-cards">
-                  {projects.map((p, i) => (
-                    <li key={i} className="project-card">
-                      <p className="project-name">{p.name}</p>
-                      <p className="project-updated">last updated: {p.updated}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="activity-section">
-                <h2>latest activity</h2>
-                <ul className="activity-list">
-                  {activity.map((a, i) => (
-                    <li key={i} className="activity-item">{a}</li>
-                  ))}
-                </ul>
-              </section>
-            </div>
-          </main>
-        </div>
+        </main>
       </div>
     </>
   )
